@@ -28,11 +28,10 @@ export default function UploadPage() {
 
     try {
       // Step 1: Upload file with progress tracking
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000/api/v1'
-      
+      // uploadFile from api-client.ts uses NEXT_PUBLIC_API_BASE from environment
       let finalProgress = 0
       const response = await uploadFile(
-        `${API_BASE}/scan/upload`,
+        `/scan/upload`, // Relative path - api-client.ts will prepend API_BASE
         file,
         (progress) => {
           finalProgress = progress
