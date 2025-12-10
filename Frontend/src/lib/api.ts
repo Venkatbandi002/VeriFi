@@ -28,7 +28,7 @@ export type Anomaly = {
 export type ScanResult = {
   file_id: string
   filename: string
-  status: string
+  status: 'pending' | 'scanning' | 'completed' | 'error'
   fraud_score: number
   severity: 'SAFE' | 'WARNING' | 'CRITICAL'
   is_duplicate: boolean
