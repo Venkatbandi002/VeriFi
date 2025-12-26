@@ -33,6 +33,24 @@ class AlertResponse(BaseModel):
     status: str
 
 
+class AnomalyItem(BaseModel):
+    type: str
+    description: str
+    confidence: float = Field(..., ge=0, le=1)
+
+
+class ScanResult(BaseModel):
+    file_id: str
+    filename: str
+    fraud_score: int
+    severity: str
+    anomalies: List[AnomalyItem]
+    text_content: str
+    extracted_tables: List
+    processing_time: int
+    confidence: float = Field(..., ge=0, le=1)
+
+
 def clean_text(text: str) -> str:
     """Clean and normalize extracted text."""
     cleaned = re.sub(r"[^\w\s.,:/-]", " ", text)
@@ -138,27 +156,33 @@ async def upload_scan(file: UploadFile = File(...)):
     # Physical Forensic Evidence (Highest Priority)
     if tamper_msg:
         fraud_score = max(fraud_score, 90) # Force High Score
-        anomalies.append({"type": "Forensic Tampering", "description": tamper_msg})
+        anomalies.append({"type": "Forensic Tampering", "description": tamper_msg, "confidence": 0.95})
     
     # Metadata Evidence
     if meta_issue:
         fraud_score = max(fraud_score, 85) # Force High Score
-        anomalies.append({"type": "Metadata Fraud", "description": meta_issue})
+        anomalies.append({"type": "Metadata Fraud", "description": meta_issue, "confidence": 0.90})
     
     # Similarity Evidence (Duplicate Hunter)
     if is_dup:
         fraud_score = 100
-        anomalies.append({"type": "Duplicate Discovery", "description": "Visual or text match found."})
+        anomalies.append({"type": "Duplicate Discovery", "description": "Visual or text match found.", "confidence": 0.99})
     
     # Content Evidence (PII Detection)
     if pii_found:
-        anomalies.append({"type": "PII Detected", "description": f"Contains: {pii_found}"})
+        anomalies.append({"type": "PII Detected", "description": f"Contains: {pii_found}", "confidence": 0.88})
         # Only add score if not already at critical levels 
         if fraud_score < 30: fraud_score += 20
 
     # 4. FINAL VERDICT
     severity = "CRITICAL" if fraud_score >= 70 else "WARNING" if fraud_score >= 30 else "SAFE"
     if not is_dup: add_to_index(text, img_hash)
+
+    # Calculate overall confidence based on anomalies
+    overall_confidence = 1.0 if anomalies else 0.0
+    if anomalies:
+        # Average confidence of all detected anomalies
+        overall_confidence = sum([a["confidence"] for a in anomalies]) / len(anomalies)
 
     result = {
         "file_id": task_id,
@@ -168,7 +192,8 @@ async def upload_scan(file: UploadFile = File(...)):
         "anomalies": anomalies,
         "text_content": text,  # Return extracted text for verification
         "extracted_tables": tables,
-        "processing_time": int((datetime.now() - start_time).total_seconds() * 1000)
+        "processing_time": int((datetime.now() - start_time).total_seconds() * 1000),
+        "confidence": overall_confidence
     }
     db[task_id] = result
     return {"task_id": task_id, "message": "Unified fraud analysis concluded."}
