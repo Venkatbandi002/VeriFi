@@ -24,11 +24,6 @@ def get_image_phash(file_bytes: bytes) -> str:
     except Exception: return ""
 
 def detect_tampering(file_bytes: bytes, filename: str) -> tuple:
-    """
-    Generalized forensic scanner. 
-    Checks EXIF, Deep Info Dict, and Binary Traces for editing footprints.
-    Returns (message, confidence) or (None, 0.0).
-    """
     name = filename.lower()
     if name.endswith(".pdf") and PDF2IMAGE_AVAILABLE:
         try:
@@ -40,33 +35,31 @@ def detect_tampering(file_bytes: bytes, filename: str) -> tuple:
     try:
         img = Image.open(io.BytesIO(file_bytes))
         
-        # 1. Deep Metadata Scan: Checks hidden blocks for any editing tool signature
-        # Generalized suspicious tool list 
+        # 1. Deep Metadata Scan (FIXED for clean output)
         suspicious_list = ["canva", "photoshop", "gimp", "adobe", "illustrator", "framer"]
         for key, value in img.info.items():
             if isinstance(value, (str, bytes)):
                 val_str = str(value).lower()
-                if any(tool in val_str for tool in suspicious_list):
-                    # Direct metadata marker = high confidence (0.93)
-                    return f"Tampering Signature: Created/Edited with {val_str.strip()}", 0.93
+                for tool in suspicious_list:
+                    if tool in val_str:
+                        # Return ONLY the tool name instead of the whole metadata block
+                        return f"Tampering Signature: '{tool}' marker found in metadata", 0.93
 
-        # 2. Raw Binary Signature Scan: Detects markers in the raw byte stream 
+        # 2. Raw Binary Signature Scan
         raw_data = file_bytes.lower()
         for tool in suspicious_list:
             if tool.encode() in raw_data:
-                # Binary marker = medium-high confidence (0.87)
                 return f"Tampering Signature: '{tool}' marker found in raw file data", 0.87
 
         # 3. Standard EXIF Scan
         if "exif" in img.info:
             exif = piexif.load(img.info["exif"])
             software = exif.get("0th", {}).get(piexif.ImageIFD.Software, b"").decode().lower()
-            if any(tool in software for tool in suspicious_list):
-                # EXIF software = high confidence (0.90)
-                return f"Metadata Fraud: Software signature '{software.strip()}' detected", 0.90
+            for tool in suspicious_list:
+                if tool in software:
+                    return f"Metadata Fraud: Software signature '{tool}' detected", 0.90
     except Exception: pass
 
-    # 4. Error Level Analysis (ELA) for pixel manipulation 
     return detect_ela(file_bytes)
 
 def detect_ela(file_bytes: bytes, threshold: float = 30.0) -> tuple:
