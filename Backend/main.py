@@ -143,10 +143,10 @@ async def upload_scan(file: UploadFile = File(...)):
 
     # 2. RUN ALL CHECKS SIMULTANEOUSLY (Cumulative Logic)
     img_hash = get_image_phash(content)
-    is_dup, _ = search_duplicate(text, img_hash)
-    tamper_msg = detect_tampering(content, filename)
-    meta_issue = analyze_metadata(content, text)
-    pii_found = detect_pii(text)
+    is_dup, dup_score = search_duplicate(text, img_hash)
+    tamper_msg, tamper_conf = detect_tampering(content, filename)
+    meta_issue, meta_conf = analyze_metadata(content, text)
+    pii_found, pii_conf = detect_pii(text)
 
     # 3. CUMULATIVE SCORING
     # Ensures forensic evidence overrides "safe" text results.
@@ -156,21 +156,22 @@ async def upload_scan(file: UploadFile = File(...)):
     # Physical Forensic Evidence (Highest Priority)
     if tamper_msg:
         fraud_score = max(fraud_score, 90) # Force High Score
-        anomalies.append({"type": "Forensic Tampering", "description": tamper_msg, "confidence": 0.95})
+        anomalies.append({"type": "Forensic Tampering", "description": tamper_msg, "confidence": tamper_conf})
     
     # Metadata Evidence
     if meta_issue:
         fraud_score = max(fraud_score, 85) # Force High Score
-        anomalies.append({"type": "Metadata Fraud", "description": meta_issue, "confidence": 0.90})
+        anomalies.append({"type": "Metadata Fraud", "description": meta_issue, "confidence": meta_conf})
     
     # Similarity Evidence (Duplicate Hunter)
     if is_dup:
         fraud_score = 100
-        anomalies.append({"type": "Duplicate Discovery", "description": "Visual or text match found.", "confidence": 0.99})
+        # Use actual duplicate similarity score as confidence
+        anomalies.append({"type": "Duplicate Discovery", "description": "Visual or text match found.", "confidence": dup_score})
     
     # Content Evidence (PII Detection)
     if pii_found:
-        anomalies.append({"type": "PII Detected", "description": f"Contains: {pii_found}", "confidence": 0.88})
+        anomalies.append({"type": "PII Detected", "description": f"Contains: {pii_found}", "confidence": pii_conf})
         # Only add score if not already at critical levels 
         if fraud_score < 30: fraud_score += 20
 
